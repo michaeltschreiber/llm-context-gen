@@ -1,0 +1,8 @@
+# Core application framework
+streamlit
+
+# For combining text/code files into context
+files-to-prompt
+
+# For interacting with the Google AI API (Gemini)
+google-generativeai
