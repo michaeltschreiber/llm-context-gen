@@ -34,6 +34,28 @@ This app checks for necessary prerequisites but **does not store or directly han
 * **In-App Previews**: Displays generated context and suggested system prompts.
 * **Status & Error Feedback**: Provides messages, progress indicators, and toasts.
 
+## Screenshots
+
+### Mode Selection
+
+![Mode Selection](img/1.png)
+
+### Progress
+
+![Progress](img/2.png)
+
+### Generated Context & Suggested System Prompt
+
+![Generated Context Preview](img/3.png)
+
+![Suggested System Prompt](img/4.png)
+
+### File Management
+
+![PDF file management](img/pdfmgmt.png)
+
+![Plaintext file management](img/txtmgmt.png)
+
 ## Prerequisites (Linux Host Recommended)
 
 1.  **Python**: Version 3.8+ recommended (`python3 --version`).
