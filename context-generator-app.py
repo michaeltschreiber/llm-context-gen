@@ -23,6 +23,7 @@ def display_info(message): st.toast(f"ℹ️ Info: {message}", icon="ℹ️")
 
 def check_command(command_name):
     """Checks if a command exists in the system's PATH."""
+    # ... (remains the same) ...
     if shutil.which(command_name) is None:
         st.warning(f"'{command_name}' not found. Install & ensure accessible.", icon="⚠️")
         return False
@@ -30,6 +31,7 @@ def check_command(command_name):
 
 def check_llama_parse_auth():
     """Checks if LlamaParse config file exists."""
+    # ... (remains the same) ...
     if not os.path.exists(LLAMA_PARSE_CONFIG_FILE):
         st.error(f"**LlamaParse Auth Missing:** Config (`{LLAMA_PARSE_CONFIG_FILE}`) missing. "
                  f"Run `{LLAMA_PARSE_COMMAND} auth` in terminal, enter key, refresh.", icon="🔑")
@@ -38,14 +40,17 @@ def check_llama_parse_auth():
 
 def list_files(directory, pattern="*.*"):
     """Lists files matching pattern, returns Path objects."""
+    # ... (remains the same) ...
     if not directory: return []
     dir_path = Path(directory)
+    # Check if dir exists before trying to list (avoid error toast for non-existent)
     if not dir_path.is_dir(): return []
     try: return sorted([f for f in dir_path.glob(pattern) if f.is_file()])
     except Exception as e: display_error(f"List files error '{directory}': {e}"); return []
 
 def handle_upload(uploaded_files, target_directory):
     """Saves uploaded files."""
+    # ... (remains the same - already creates target if needed) ...
     if not uploaded_files: return 0
     if not target_directory: display_error("Target upload dir not set."); return 0
     saved = 0; skipped = 0
@@ -58,15 +63,15 @@ def handle_upload(uploaded_files, target_directory):
                 with open(dest, "wb") as f: f.write(up_file.getbuffer())
                 saved += 1
             except Exception as e: display_error(f"Save failed '{up_file.name}': {e}"); skipped += 1
-        # Display messages but rely on external rerun/clear to update UI visually
-        if saved > 0: display_success(f"Uploaded {saved} file(s). Refreshing UI...")
+        if saved > 0: display_success(f"Processed {saved} uploaded file(s).") # Message changed slightly
         if skipped > 0: display_error(f"Failed {skipped} upload(s).")
     except OSError as e: display_error(f"Create dir error '{target_directory}': {e}")
     except Exception as e: display_error(f"Upload error: {e}")
-    return saved # Return count for potential use
+    return saved
 
 def delete_file(filepath_str):
     """Deletes file and reruns."""
+    # ... (remains the same) ...
     try:
         if not filepath_str: display_warning("Empty path for deletion."); return
         fp = Path(filepath_str)
@@ -77,6 +82,7 @@ def delete_file(filepath_str):
 
 def clear_directory(dir_path_str):
     """Removes and recreates a directory if it exists."""
+    # ... (remains the same - already creates dir if needed) ...
     dir_path = Path(dir_path_str); cleared = False
     if dir_path.exists():
         try:
@@ -84,24 +90,26 @@ def clear_directory(dir_path_str):
             display_info(f"Cleared directory: '{dir_path_str}'"); cleared = True
         except OSError as e: display_error(f"Failed to clear dir '{dir_path_str}': {e}"); cleared = False
     else:
-        try: dir_path.mkdir(parents=True, exist_ok=True); cleared = True # Ensure exists if clearing non-existent
+        try: dir_path.mkdir(parents=True, exist_ok=True); cleared = True
         except OSError as e: display_error(f"Failed create non-existent dir '{dir_path_str}': {e}"); cleared = False
     return cleared
 
 # --- Core Processing Functions ---
 def parse_pdfs(pdf_input_dir, parsed_output_dir):
     """Parses PDF files using LlamaParse CLI. Clears output dir first."""
+    # ... (remains the same - already ensures input/output dirs) ...
     st.write(f"Parsing PDFs from: `{pdf_input_dir}` -> `{parsed_output_dir}`")
     if not check_command(LLAMA_PARSE_COMMAND): display_error(f"'{LLAMA_PARSE_COMMAND}' not found."); return False, 0, 0
     if not check_llama_parse_auth(): return False, 0, 0
     pdf_in_path=Path(pdf_input_dir); parsed_out_path=Path(parsed_output_dir)
+    # Input dir existence check is crucial before listing/parsing
     if not pdf_in_path.is_dir(): display_error(f"PDF Input Dir not found: '{pdf_input_dir}'"); return False, 0, 0
     st.write(f"Preparing output directory: `{parsed_output_dir}`...")
-    try:
+    try: # Clear and create output dir
         if parsed_out_path.exists(): shutil.rmtree(parsed_out_path)
         parsed_out_path.mkdir(parents=True, exist_ok=True)
     except OSError as e: display_error(f"Output dir error '{parsed_output_dir}': {e}"); return False, 0, 0
-    pdfs = list_files(pdf_input_dir, "*.pdf")
+    pdfs = list_files(pdf_input_dir, "*.pdf") # Use list_files which handles non-existent dir
     if not pdfs: st.warning(f"No PDF files found in '{pdf_input_dir}'.", icon="ℹ️"); return True, 0, 0
     st.write(f"Found {len(pdfs)} PDF(s) to process.")
     prog = st.progress(0); ok=0; fail=0; env = os.environ.copy()
@@ -131,17 +139,31 @@ def parse_pdfs(pdf_input_dir, parsed_output_dir):
 
 def combine_files_via_cli(dirs_to_scan, output_fp_str):
     """Combines files using files-to-prompt CLI (recursive)."""
+    # ... (remains the same - already ensures output dir) ...
     st.write(f"Combining files via '{FILES_TO_PROMPT_COMMAND}' CLI...")
     if not check_command(FILES_TO_PROMPT_COMMAND): display_error(f"'{FILES_TO_PROMPT_COMMAND}' not found."); return False, None
     if not dirs_to_scan: display_error("No input dirs specified."); return False, None
-    valid=[str(d.resolve()) for d_str in dirs_to_scan if (d := Path(d_str)).is_dir() or st.warning(f"Skip invalid dir: '{d_str}'")]
-    if not valid: display_error("No valid dirs found."); return False, None
+    # Filter for valid directories *before* resolving, handle potential errors during check
+    valid_dirs_resolved = []
+    for d_str in dirs_to_scan:
+        try:
+            d_path = Path(d_str)
+            if d_path.is_dir():
+                valid_dirs_resolved.append(str(d_path.resolve()))
+            else:
+                 st.warning(f"Skip invalid dir: '{d_str}'")
+        except Exception as e:
+             st.warning(f"Error checking dir '{d_str}': {e}")
+
+    if not valid_dirs_resolved: display_error("No valid dirs found."); return False, None
+
     out_fp=Path(output_fp_str).resolve(); out_dir=out_fp.parent
-    try: out_dir.mkdir(parents=True, exist_ok=True)
+    try: out_dir.mkdir(parents=True, exist_ok=True) # Ensure output dir exists
     except OSError as e: display_error(f"Output dir error '{out_dir}': {e}"); return False, None
+
     quoted_out_fp=shlex.quote(str(out_fp))
-    cmd=[FILES_TO_PROMPT_COMMAND] + [shlex.quote(d) for d in valid] + ["--cxml", "-o", quoted_out_fp]
-    st.info(f"Combining: `{', '.join(valid)}` (Recursive)"); st.write(f"Executing: `{' '.join(cmd)}`")
+    cmd=[FILES_TO_PROMPT_COMMAND] + [shlex.quote(d) for d in valid_dirs_resolved] + ["--cxml", "-o", quoted_out_fp]
+    st.info(f"Combining: `{', '.join(valid_dirs_resolved)}` (Recursive)"); st.write(f"Executing: `{' '.join(cmd)}`")
     try:
         res=subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=300)
         if res.returncode == 0 and out_fp.exists():
@@ -161,6 +183,7 @@ def combine_files_via_cli(dirs_to_scan, output_fp_str):
 # --- Load README ---
 # @st.cache_data
 def load_readme():
+    # ... (remains the same) ...
     content = f"Error loading {README_FILE}"; script_d = Path(__file__).parent; p = script_d / README_FILE
     if not p.exists(): p = Path.cwd() / README_FILE
     try:
@@ -169,6 +192,18 @@ def load_readme():
     except Exception as e: content = f"Error reading {README_FILE}: {e}"
     return content
 readme_content = load_readme()
+
+# --- Upload Callbacks ---
+# ... (callbacks remain the same) ...
+def process_pdf_upload():
+    uploaded_files = st.session_state.get("pdf_uploader")
+    pdf_dir = st.session_state.get("pdf_dir")
+    if uploaded_files and pdf_dir: handle_upload(uploaded_files, pdf_dir)
+
+def process_txt_upload():
+    uploaded_files = st.session_state.get("txt_uploader")
+    txt_dir = st.session_state.get("txt_dir")
+    if uploaded_files and txt_dir: handle_upload(uploaded_files, txt_dir)
 
 # --- Streamlit App UI ---
 st.set_page_config(layout="wide", page_title="Files-to-Prompt GUI")
@@ -182,10 +217,12 @@ st.info(f"Checks: `{LLAMA_PARSE_COMMAND}`:{'✅' if did_llama else '❌'}, `{FIL
 # --- Sidebar ---
 with st.sidebar:
     st.header("⚙️ Configuration"); st.subheader("Input Folders")
+    # Initialize session state with defaults if keys don't exist
     if 'pdf_dir' not in st.session_state: st.session_state.pdf_dir=os.path.abspath(DEFAULT_PDF_INPUT_DIR)
     if 'txt_dir' not in st.session_state: st.session_state.txt_dir=os.path.abspath(DEFAULT_TXT_INPUT_DIR)
     if 'out_file' not in st.session_state: st.session_state.out_file="context_prompt_output.txt"
     if 'out_loc' not in st.session_state: st.session_state.out_loc=os.path.abspath(".")
+    # Widgets read/write session state via 'key' and 'value'
     st.text_input("PDF Input Folder", value=st.session_state.pdf_dir, key="pdf_dir", help="Folder for PDFs.")
     st.text_input("TXT Input Folder", value=st.session_state.txt_dir, key="txt_dir", help="Folder for TXT/MD files.")
     st.subheader("Output Settings")
@@ -196,11 +233,45 @@ with st.sidebar:
     final_out_path=os.path.abspath(os.path.join(st.session_state.out_loc, st.session_state.out_file))
     st.info(f"Final context file:\n`{final_out_path}`")
 
-# --- Main Area with Tabs ---
+    # --- Add Directory Status / Creation Check ---
+    st.markdown("---"); st.subheader("Directory Status")
+    dirs_to_ensure = {
+        "PDF Input": st.session_state.pdf_dir,
+        "TXT Input": st.session_state.txt_dir,
+        "Output Location": st.session_state.out_loc,
+    }
+    all_dirs_ok = True
+    for name, dir_path_str in dirs_to_ensure.items():
+        dir_path = Path(dir_path_str)
+        status_icon = "❔" # Default: Unknown / Not Checked Yet
+        try:
+            exists_before = dir_path.is_dir()
+            dir_path.mkdir(parents=True, exist_ok=True) # Create if needed
+            exists_after = dir_path.is_dir() # Check again
+            if exists_after and not exists_before: status_icon = "✅ (Created)"
+            elif exists_after: status_icon = "✅ (Exists)"
+            else: status_icon = "❌ (Failed Create?)"; all_dirs_ok = False # Should not happen if mkdir didn't raise error
+        except OSError as e:
+            status_icon = f"❌ (OS Error: {e})"
+            all_dirs_ok = False
+        except Exception as e:
+             status_icon = f"❌ (Error: {e})"
+             all_dirs_ok = False
+        finally:
+            # Display status in sidebar
+            st.markdown(f"{status_icon} {name}: `{dir_path_str}`")
+
+# --- Main App Area ---
+if not all_dirs_ok:
+    st.error("One or more essential directories could not be created or accessed. Check permissions/paths in sidebar. App functions may fail.")
+    # Optionally st.stop() here if directories are absolutely critical for any display
+
+# --- Tabs ---
 tab1, tab2, tab3 = st.tabs(["🚀 Process Files", "📤 PDF Upload", "📝 Plaintext Upload"])
 
 # --- Tab 1: Process Files ---
 with tab1:
+    # ... (Logic remains the same as the previous version) ...
     st.header("🚀 Process Files")
     pdf_d=st.session_state.pdf_dir; txt_d=st.session_state.txt_dir
     parsed_d=os.path.join(txt_d, DEFAULT_PARSED_PDF_OUTPUT_SUBDIR)
@@ -209,13 +280,13 @@ with tab1:
     st.write("---")
     if st.button("Generate Context File", key="generate_main", type="primary"):
         ctx_content=None; parse_ok=True; pdf_successes=0; step_ok=True; target_dir=None
-        # Step 1: PDF Parsing (if needed)
+        # Step 1: PDF Parsing
         if opt in ["PDF only", "Both"]:
             st.subheader("Step 1: Parsing PDFs")
             parse_ok, pdf_successes, _ = parse_pdfs(pdf_d, parsed_d)
             if not parse_ok and opt == "PDF only": st.error("PDF parsing failed..."); st.stop()
             elif pdf_successes == 0 and opt == "PDF only": st.warning("No PDFs parsed for 'PDF only'."); step_ok = False
-        # Step 2: Determine Target Directory & Pre-actions
+        # Step 2: Determine Target Dir & Pre-actions
         if step_ok:
             st.subheader("Step 2: Preparing Combination")
             if opt == "Both":
@@ -244,18 +315,14 @@ with tab1:
 
 # --- Tab 2: PDF Upload ---
 with tab2:
+    # ... (Logic remains the same - uses on_change) ...
     st.header("📤 Manage PDF Files"); pdf_dir = st.session_state.pdf_dir
     st.write(f"**Target:** `{pdf_dir}`"); st.markdown("---")
-    try: Path(pdf_dir).mkdir(parents=True, exist_ok=True)
-    except OSError as e: st.error(f"Create PDF dir error: {e}.")
+    # Directory existence assured by check after sidebar
     st.subheader("Upload PDFs")
-    uploaded_pdfs = st.file_uploader("Select PDF files:", type="pdf", accept_multiple_files=True, key="pdf_uploader")
-    if uploaded_pdfs:
-        handle_upload(uploaded_pdfs, pdf_dir)
-        st.session_state.pdf_uploader = None # Clear widget state
-        st.rerun() # Rerun to reflect clear
+    st.file_uploader("Select PDF files:", type="pdf", accept_multiple_files=True, key="pdf_uploader", on_change=process_pdf_upload)
     st.markdown("---"); st.subheader("Existing PDFs")
-    if st.button("🔄 Refresh", key="refresh_pdfs"): pass # Natural rerun
+    if st.button("🔄 Refresh", key="refresh_pdfs"): pass
     pdf_files = list_files(pdf_dir, "*.pdf")
     if not pdf_files: st.info(f"No PDFs found in `{pdf_dir}`.")
     else:
@@ -270,30 +337,23 @@ with tab2:
 
 # --- Tab 3: Plaintext Upload ---
 with tab3:
+    # ... (Logic remains the same - uses on_change) ...
     st.header("📝 Manage Plaintext Files"); txt_dir = st.session_state.txt_dir
     parsed_sub = DEFAULT_PARSED_PDF_OUTPUT_SUBDIR
     st.write(f"**Target:** `{txt_dir}`"); st.caption(f"Note: Subfolder (`{parsed_sub}`) managed automatically.")
     st.markdown("---")
-    try: Path(txt_dir).mkdir(parents=True, exist_ok=True)
-    except OSError as e: st.error(f"Create TXT dir error: {e}.")
+    # Directory existence assured by check after sidebar
     st.subheader("Upload Text/Code/MD Files")
     types = ["txt", "md", "markdown", "json", "xml", "yaml", "yml", "py", "js", "html", "css", "csv", "tsv", "rst"]
-    uploaded_txts = st.file_uploader(f"Select files ({', '.join(types)}):", type=types, accept_multiple_files=True, key="txt_uploader")
-    if uploaded_txts:
-        handle_upload(uploaded_txts, txt_dir)
-        st.session_state.txt_uploader = None # Clear widget state
-        st.rerun() # Rerun to reflect clear
+    st.file_uploader(f"Select files ({', '.join(types)}):", type=types, accept_multiple_files=True, key="txt_uploader", on_change=process_txt_upload)
     st.markdown("---"); st.subheader("Existing Files (excluding parsed subfolder)")
-    if st.button("🔄 Refresh", key="refresh_txts"): pass # Natural rerun
+    if st.button("🔄 Refresh", key="refresh_txts"): pass
     all_f = list_files(txt_dir, "*.*"); parsed_p = Path(txt_dir) / parsed_sub
-    # Filter using Path object's relationship, more robust than startswith
-    txt_disp = []
+    txt_disp = [];
     for f in all_f:
-        try:
-            f.relative_to(parsed_p) # Will raise ValueError if f is not inside parsed_p
-        except ValueError:
-            txt_disp.append(f) # Add if not inside
-        except Exception: pass # Ignore other potential errors comparing paths
+        try: f.relative_to(parsed_p)
+        except ValueError: txt_disp.append(f)
+        except Exception: pass
     if not txt_disp: st.info(f"No user-added files found directly in `{txt_dir}`.")
     else:
         st.write(f"{len(txt_disp)} file(s):")

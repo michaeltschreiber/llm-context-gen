@@ -1,0 +1,14 @@
+<documents>
+<document index="1">
+<source>/root/repos/github/llm-context-gen/txt_files/test.txt</source>
+<document_content>
+test file!
+</document_content>
+</document>
+<document index="2">
+<source>/root/repos/github/llm-context-gen/txt_files/parsed_pdfs_streamlit/dummy.md</source>
+<document_content>
+Dummy PDF file
+</document_content>
+</document>
+</documents>
